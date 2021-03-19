@@ -78,8 +78,9 @@ func buildIndex(root string) (map[string][]string, []string) {
 			}
 
 			exists := false
+
 			for _, li := range list {
-				if li == trimmedWord {
+				if li == noteId {
 					exists = true
 					break
 				}
