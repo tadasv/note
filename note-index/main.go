@@ -14,6 +14,11 @@ var (
 	defaultNotebookRoot = os.Getenv("HOME") + "/.notes"
 )
 
+// noteMeta stores note metadata
+type noteMeta struct {
+	firstLine string
+}
+
 func pruneWord(word string) string {
 	w := strings.ReplaceAll(strings.ToLower(strings.TrimSpace(word)), "\n", "")
 	/*
@@ -33,17 +38,23 @@ func printReverseIndex(index map[string][]string) {
 	}
 }
 
-func printFloatingNotes(index map[string][]string, noteIds []string) {
+func printFloatingNotes(index map[string][]string, noteIds []string, metas map[string]noteMeta) {
 	for _, id := range noteIds {
-		if _, ok := index[id]; !ok {
-			fmt.Printf("%s\n", id)
+		// TODO decide how I want to store references to other nodes. Right now it's [[noteid]]
+		if _, ok := index["[["+id+"]]"]; !ok {
+			if meta, ok := metas[id]; ok {
+				fmt.Printf("%s %s\n", id, meta.firstLine)
+			} else {
+				fmt.Printf("%s\n", id)
+			}
 		}
 	}
 }
 
-func buildIndex(root string) (map[string][]string, []string) {
+func buildIndex(root string) (map[string][]string, []string, map[string]noteMeta) {
 	index := map[string][]string{}
 	noteIds := []string{}
+	noteMetas := map[string]noteMeta{}
 
 	if err := filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
 		if info.IsDir() {
@@ -63,9 +74,15 @@ func buildIndex(root string) (map[string][]string, []string) {
 		noteId := path[len(root)+1:]
 		noteIds = append(noteIds, noteId)
 
-		contents := strings.ReplaceAll(string(data), "\n", " ")
+		noteContent := string(data)
 
-		words := strings.Split(contents, " ")
+		noteMetas[noteId] = noteMeta{
+			firstLine: noteContent[:strings.Index(noteContent, "\n")],
+		}
+
+		trimmedContent := strings.ReplaceAll(noteContent, "\n", " ")
+
+		words := strings.Split(trimmedContent, " ")
 		for _, word := range words {
 			trimmedWord := pruneWord(word)
 			if len(trimmedWord) == 0 {
@@ -97,7 +114,7 @@ func buildIndex(root string) (map[string][]string, []string) {
 		panic(err)
 	}
 
-	return index, noteIds
+	return index, noteIds, noteMetas
 }
 
 func usage() {
@@ -135,13 +152,13 @@ func main() {
 
 	switch cmd {
 	case "rev":
-		index, _ := buildIndex(root)
+		index, _, _ := buildIndex(root)
 		printReverseIndex(index)
 	case "float":
 		fallthrough
 	case "":
-		index, noteIds := buildIndex(root)
-		printFloatingNotes(index, noteIds)
+		index, noteIds, metas := buildIndex(root)
+		printFloatingNotes(index, noteIds, metas)
 	default:
 		usage()
 	}
