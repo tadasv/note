@@ -14,47 +14,41 @@ var (
 	defaultNotebookRoot = os.Getenv("HOME") + "/.notes"
 )
 
-// noteMeta stores note metadata
-type noteMeta struct {
-	firstLine string
-}
-
-func pruneWord(word string) string {
-	w := strings.ReplaceAll(strings.ToLower(strings.TrimSpace(word)), "\n", "")
-	/*
-		for _, c := range ",.?!" {
-			w = strings.ReplaceAll(w, string(c), "")
-		}
-	*/
-	return w
-}
-
-func printReverseIndex(index map[string][]string) {
-	for word, ids := range index {
-		if len(ids) == 0 {
-			continue
-		}
-		fmt.Printf("%s %s\n", word, strings.Join(ids, " "))
-	}
-}
-
-func printFloatingNotes(index map[string][]string, noteIds []string, metas map[string]noteMeta) {
-	for _, id := range noteIds {
-		// TODO decide how I want to store references to other nodes. Right now it's [[noteid]]
-		if _, ok := index["[["+id+"]]"]; !ok {
-			if meta, ok := metas[id]; ok {
-				fmt.Printf("%s %s\n", id, meta.firstLine)
+func printFloatingNotes(primaryIndex *UniqueKeyValueIndex, reverseIndex *SetIndex) {
+	for noteId, noteContent := range primaryIndex.data {
+		if _, ok := reverseIndex.data["[["+noteId+"]]"]; !ok {
+			firstLine := strings.TrimSpace(noteContent[:strings.Index(noteContent, "\n")])
+			if len(firstLine) > 0 {
+				fmt.Printf("%s %s\n", noteId, firstLine)
 			} else {
-				fmt.Printf("%s\n", id)
+				fmt.Printf("%s\n", noteId)
 			}
 		}
 	}
 }
 
-func buildIndex(root string) (map[string][]string, []string, map[string]noteMeta) {
-	index := map[string][]string{}
-	noteIds := []string{}
-	noteMetas := map[string]noteMeta{}
+func usage() {
+	fmt.Printf(`usage: %s [command]
+
+commands:
+
+  rev
+    prints reverse index. Each word points to a list of note ids
+  
+  float (default)
+    prints a list of notes that are not linked to other notes.
+    (The note id is note present in some other note).
+
+`, os.Args[0])
+	os.Exit(-1)
+}
+
+// buildPrimaryIndex creates a primary index from note files located at root.
+// Each key in the index is note ID and value is the content.
+func buildPrimaryIndex(root string) (*UniqueKeyValueIndex, error) {
+	idx := &UniqueKeyValueIndex{
+		data: map[string]string{},
+	}
 
 	if err := filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
 		if info.IsDir() {
@@ -72,65 +66,36 @@ func buildIndex(root string) (map[string][]string, []string, map[string]noteMeta
 		}
 
 		noteId := path[len(root)+1:]
-		noteIds = append(noteIds, noteId)
+		idx.Add(noteId, string(data))
 
-		noteContent := string(data)
+		return nil
+	}); err != nil {
+		return nil, err
+	}
 
-		noteMetas[noteId] = noteMeta{
-			firstLine: noteContent[:strings.Index(noteContent, "\n")],
-		}
+	return idx, nil
+}
 
-		trimmedContent := strings.ReplaceAll(noteContent, "\n", " ")
+// buildReverseIndex creates a reverse index (word to a set of notes)
+func buildReverseIndex(primaryIndex *UniqueKeyValueIndex) (*SetIndex, error) {
+	idx := &SetIndex{
+		data: map[string][]string{},
+	}
 
+	for noteId, noteContent := range primaryIndex.data {
+		trimmedContent := strings.TrimSpace(strings.ReplaceAll(noteContent, "\n", " "))
 		words := strings.Split(trimmedContent, " ")
 		for _, word := range words {
-			trimmedWord := pruneWord(word)
+			trimmedWord := strings.ToLower(strings.TrimSpace(word))
 			if len(trimmedWord) == 0 {
 				continue
 			}
 
-			list, ok := index[trimmedWord]
-			if !ok {
-				list = []string{}
-			}
-
-			exists := false
-
-			for _, li := range list {
-				if li == noteId {
-					exists = true
-					break
-				}
-			}
-
-			if !exists {
-				list = append(list, noteId)
-				index[trimmedWord] = list
-			}
+			idx.Add(trimmedWord, noteId)
 		}
-
-		return nil
-	}); err != nil {
-		panic(err)
 	}
 
-	return index, noteIds, noteMetas
-}
-
-func usage() {
-	fmt.Printf(`usage: %s [command]
-
-commands:
-
-  rev
-    prints reverse index. Each word points to a list of note ids
-  
-  float (default)
-    prints a list of notes that are not linked to other notes.
-    (The note id is note present in some other note).
-
-`, os.Args[0])
-	os.Exit(-1)
+	return idx, nil
 }
 
 func main() {
@@ -150,15 +115,25 @@ func main() {
 		cmd = os.Args[1]
 	}
 
+	primaryIndex, err := buildPrimaryIndex(root)
+	if err != nil {
+		panic(err)
+	}
+
+	reverseIndex, err := buildReverseIndex(primaryIndex)
+	if err != nil {
+		panic(err)
+	}
+
 	switch cmd {
 	case "rev":
-		index, _, _ := buildIndex(root)
-		printReverseIndex(index)
+		for key, values := range reverseIndex.data {
+			fmt.Printf("%s %s\n", key, strings.Join(values, " "))
+		}
 	case "float":
 		fallthrough
 	case "":
-		index, noteIds, metas := buildIndex(root)
-		printFloatingNotes(index, noteIds, metas)
+		printFloatingNotes(primaryIndex, reverseIndex)
 	default:
 		usage()
 	}
