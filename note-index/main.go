@@ -5,6 +5,7 @@ import (
 	"io/ioutil"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 )
 
@@ -14,10 +15,15 @@ var (
 	defaultNotebookRoot = os.Getenv("HOME") + "/.notes"
 )
 
+func getFirstLine(text string) string {
+	firstLine := strings.TrimSpace(text[:strings.Index(text, "\n")])
+	return firstLine
+}
+
 func printFloatingNotes(primaryIndex *UniqueKeyValueIndex, reverseIndex *SetIndex) {
 	for noteId, noteContent := range primaryIndex.data {
 		if _, ok := reverseIndex.data["[["+noteId+"]]"]; !ok {
-			firstLine := strings.TrimSpace(noteContent[:strings.Index(noteContent, "\n")])
+			firstLine := getFirstLine(noteContent)
 			if len(firstLine) > 0 {
 				fmt.Printf("%s %s\n", noteId, firstLine)
 			} else {
@@ -35,9 +41,13 @@ commands:
   rev
     prints reverse index. Each word points to a list of note ids
   
-  float (default)
+  float
     prints a list of notes that are not linked to other notes.
-    (The note id is note present in some other note).
+    (The note id is not present in some other note).
+
+  find (default)
+    performs a search on notes. Input argument is a regexp that will
+	match against reverse index.
 
 `, os.Args[0])
 	os.Exit(-1)
@@ -98,6 +108,37 @@ func buildReverseIndex(primaryIndex *UniqueKeyValueIndex) (*SetIndex, error) {
 	return idx, nil
 }
 
+func findNotes(primaryIndex *UniqueKeyValueIndex, reverseIndex *SetIndex, query string) {
+	// note id => number of matches
+	matchCount := map[string]int{}
+
+	r, err := regexp.Compile(query)
+	if err != nil {
+		panic(err)
+	}
+
+	for k, noteIds := range reverseIndex.data {
+		if r.MatchString(k) {
+			for _, id := range noteIds {
+				currentCount, ok := matchCount[id]
+				if ok {
+					matchCount[id] = currentCount + 1
+				} else {
+					matchCount[id] = 1
+				}
+			}
+		}
+	}
+
+	sorted := sortIntMap(matchCount)
+
+	for i := len(sorted) - 1; i >= 0; i-- {
+		p := sorted[i]
+		firstLine := getFirstLine(primaryIndex.data[p.key])
+		fmt.Printf("%s %d %s\n", p.key, p.value, firstLine)
+	}
+}
+
 func main() {
 	root := notebookRoot
 	if root == "" {
@@ -131,9 +172,14 @@ func main() {
 			fmt.Printf("%s %s\n", key, strings.Join(values, " "))
 		}
 	case "float":
-		fallthrough
-	case "":
 		printFloatingNotes(primaryIndex, reverseIndex)
+	case "":
+		fallthrough
+	case "find":
+		if len(os.Args) != 3 {
+			usage()
+		}
+		findNotes(primaryIndex, reverseIndex, os.Args[2])
 	default:
 		usage()
 	}
