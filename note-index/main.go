@@ -93,15 +93,15 @@ func buildReverseIndex(primaryIndex *UniqueKeyValueIndex) (*SetIndex, error) {
 	}
 
 	for noteId, noteContent := range primaryIndex.data {
-		trimmedContent := strings.TrimSpace(strings.ReplaceAll(noteContent, "\n", " "))
-		words := strings.Split(trimmedContent, " ")
+		words := tokenize(noteContent)
+		// trimmedContent := strings.TrimSpace(strings.ReplaceAll(noteContent, "\n", " "))
+		// words := strings.Split(trimmedContent, " ")
 		for _, word := range words {
-			trimmedWord := strings.ToLower(strings.TrimSpace(word))
-			if len(trimmedWord) == 0 {
+			if len(word) == 0 {
 				continue
 			}
 
-			idx.Add(trimmedWord, noteId)
+			idx.Add(word, noteId)
 		}
 	}
 
@@ -136,6 +136,49 @@ func findNotes(primaryIndex *UniqueKeyValueIndex, reverseIndex *SetIndex, query 
 		p := sorted[i]
 		firstLine := getFirstLine(primaryIndex.data[p.key])
 		fmt.Printf("%s %d %s\n", p.key, p.value, firstLine)
+	}
+}
+
+func findNotes2(primaryIndex *UniqueKeyValueIndex, reverseIndex *SetIndex, query string) {
+	// note id => number of matches
+	matchCount := map[string]int{}
+
+	queryTokens := tokenize(query)
+	queryTokenMap := map[string]interface{}{}
+	for _, t := range queryTokens {
+		queryTokenMap[t] = true
+	}
+
+	for k, noteIds := range reverseIndex.data {
+		if _, ok := queryTokenMap[k]; ok {
+			for _, id := range noteIds {
+				currentCount, ok := matchCount[id]
+				if ok {
+					matchCount[id] = currentCount + 1
+				} else {
+					matchCount[id] = 1
+				}
+			}
+		}
+	}
+
+	sorted := sortIntMap(matchCount)
+
+	if true {
+		// precise match where all tokens were found in the doc
+		for id, count := range matchCount {
+			if count == len(queryTokens) {
+				firstLine := getFirstLine(primaryIndex.data[id])
+				fmt.Printf("%s %d %s\n", id, count, firstLine)
+			}
+		}
+	} else {
+		// non-precise match
+		for i := len(sorted) - 1; i >= 0; i-- {
+			p := sorted[i]
+			firstLine := getFirstLine(primaryIndex.data[p.key])
+			fmt.Printf("%s %d %s\n", p.key, p.value, firstLine)
+		}
 	}
 }
 
@@ -179,7 +222,7 @@ func main() {
 		if len(os.Args) != 3 {
 			usage()
 		}
-		findNotes(primaryIndex, reverseIndex, os.Args[2])
+		findNotes2(primaryIndex, reverseIndex, os.Args[2])
 	default:
 		usage()
 	}
