@@ -147,8 +147,18 @@ func (db *NoteDB) findFloatingNotes() []*Note {
 	return res
 }
 
-func printAllNotes(db *NoteDB) {
-	for _, note := range db.primaryIndex {
-		printNotePreview(db, note, "", true)
+func (db *NoteDB) findBrokenLinks() *SetIndex {
+	brokenLinks := &SetIndex{
+		data: map[string][]string{},
 	}
+
+	for noteId, links := range db.linkIndex.data {
+		for _, linkId := range links {
+			if _, ok := db.primaryIndex[linkId]; !ok {
+				brokenLinks.Add(noteId, linkId)
+			}
+		}
+	}
+
+	return brokenLinks
 }
