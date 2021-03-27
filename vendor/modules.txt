@@ -1,0 +1,17 @@
+# github.com/alecthomas/kong v0.2.16
+## explicit
+github.com/alecthomas/kong
+# github.com/caneroj1/stemmer v0.0.0-20170128035808-c9f2ce1504d5
+## explicit
+github.com/caneroj1/stemmer
+# github.com/davecgh/go-spew v1.1.1
+github.com/davecgh/go-spew/spew
+# github.com/pkg/errors v0.8.1
+github.com/pkg/errors
+# github.com/pmezard/go-difflib v1.0.0
+github.com/pmezard/go-difflib/difflib
+# github.com/stretchr/testify v1.7.0
+## explicit
+github.com/stretchr/testify/assert
+# gopkg.in/yaml.v3 v3.0.0-20200313102051-9f266ea9e77c
+gopkg.in/yaml.v3
