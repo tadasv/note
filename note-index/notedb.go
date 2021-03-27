@@ -88,17 +88,15 @@ func (db *NoteDB) allNotes() []*Note {
 }
 
 func (db *NoteDB) findNotes(query string) []*Note {
-	if len(query) == 0 {
-		return db.allNotes()
-	}
-
 	// note id => number of matches
 	matchCount := map[string]int{}
 
 	queryTokens := tokenize(query)
 	queryTokenMap := map[string]interface{}{}
 	for _, t := range queryTokens {
-		queryTokenMap[t] = true
+		if len(t) > 0 {
+			queryTokenMap[t] = true
+		}
 	}
 
 	for k, noteIds := range db.reverseIndex.data {

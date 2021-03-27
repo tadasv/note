@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+
+	"github.com/alecthomas/kong"
 )
 
 var (
@@ -12,79 +14,88 @@ var (
 	defaultNotebookRoot = os.Getenv("HOME") + "/.notes"
 )
 
-func usage() {
-	fmt.Printf(`usage: %s [command]
+var CLI struct {
+	NotebookRoot string   `env:"NOTEBOOK_ROOT"`
+	Float        FloatCmd `cmd:"float" aliases:"f"`
+	Query        QueryCmd `cmd:"query" aliases:"q"`
+	Info         InfoCmd  `cmd:"info" aliases:"i"`
+	List         ListCmd  `cmd:"list" aliases:"l"`
+}
 
-commands:
+type FloatCmd struct {
+}
 
-  float
-    prints a list of notes that are not linked to other notes.
-    (The note id is not present in some other note).
+func (c *FloatCmd) Run() error {
+	db := &NoteDB{}
+	if err := db.Load(CLI.NotebookRoot); err != nil {
+		return err
+	}
 
-  find
-    performs a search on notes. Input argument is a regexp that will
-	match against reverse index.
+	for _, note := range db.findFloatingNotes() {
+		printNotePreview(db, note, "", false)
+	}
 
-`, os.Args[0])
-	os.Exit(-1)
+	return nil
+}
+
+type ListCmd struct {
+}
+
+func (c *ListCmd) Run() error {
+	db := &NoteDB{}
+	if err := db.Load(CLI.NotebookRoot); err != nil {
+		return err
+	}
+
+	for _, note := range db.allNotes() {
+		printNotePreview(db, note, "", false)
+	}
+	return nil
+}
+
+type QueryCmd struct {
+	Query string `arg:""`
+}
+
+func (c *QueryCmd) Run() error {
+	db := &NoteDB{}
+	if err := db.Load(CLI.NotebookRoot); err != nil {
+		return err
+	}
+
+	for _, note := range db.findNotes(CLI.Query.Query) {
+		printNotePreview(db, note, "", false)
+	}
+	return nil
+}
+
+type InfoCmd struct {
+	ID string `arg:""`
+}
+
+func (c *InfoCmd) Run() error {
+	db := &NoteDB{}
+	if err := db.Load(CLI.NotebookRoot); err != nil {
+		return err
+	}
+
+	note, ok := db.primaryIndex[CLI.Info.ID]
+	if !ok {
+		fmt.Printf("not found\n")
+		return nil
+	}
+	printNote(db, note)
+
+	return nil
 }
 
 func main() {
-	root := notebookRoot
-	if root == "" {
-		root = defaultNotebookRoot
+	ctx := kong.Parse(&CLI)
+	if len(CLI.NotebookRoot) == 0 {
+		CLI.NotebookRoot = defaultNotebookRoot
 	}
-
-	var err error
-	root, err = filepath.Abs(root)
-	if err != nil {
-		panic(err)
-	}
-
-	db := &NoteDB{}
-	if err := db.Load(root); err != nil {
-		panic(err)
-	}
-
-	cmd := ""
-	if len(os.Args) > 1 {
-		cmd = os.Args[1]
-	}
-
-	switch cmd {
-	case "float":
-		for _, note := range db.findFloatingNotes() {
-			printNotePreview(db, note, "", false)
-		}
-	case "query":
-		fallthrough
-	case "q":
-		if len(os.Args) < 2 {
-			usage()
-		}
-
-		q := ""
-		if len(os.Args) > 2 {
-			q = os.Args[2]
-		}
-
-		for _, note := range db.findNotes(q) {
-			printNotePreview(db, note, "", false)
-		}
-	case "h":
-		fallthrough
-	case "help":
-		usage()
-	default:
-		if len(os.Args) != 2 {
-			usage()
-		}
-
-		note, ok := db.primaryIndex[os.Args[1]]
-		if !ok {
-			fmt.Printf("not found\n")
-			return
-		}
-		printNote(db, note)
-	}
+	root, err := filepath.Abs(CLI.NotebookRoot)
+	ctx.FatalIfErrorf(err)
+	CLI.NotebookRoot = root
+	ctx.FatalIfErrorf(ctx.Run())
 }
