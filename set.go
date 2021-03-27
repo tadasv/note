@@ -1,10 +1,10 @@
 package main
 
-type SetIndex struct {
+type Set struct {
 	data map[string][]string
 }
 
-func (p *SetIndex) Add(key, value string) error {
+func (p *Set) Add(key, value string) error {
 	if items, ok := p.data[key]; ok {
 		for _, val := range items {
 			if val == value {

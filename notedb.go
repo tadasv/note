@@ -10,22 +10,22 @@ import (
 
 type NoteDB struct {
 	primaryIndex map[string]*Note
-	reverseIndex *SetIndex
+	reverseIndex *Set
 	// note -> a set of note ids
-	linkIndex *SetIndex
+	linkIndex *Set
 	// notes that point to a the same note (reverse of linkIndex)
-	backLinkIndex *SetIndex
+	backLinkIndex *Set
 }
 
 func (db *NoteDB) Load(notebookRoot string) error {
 	db.primaryIndex = make(map[string]*Note)
-	db.reverseIndex = &SetIndex{
+	db.reverseIndex = &Set{
 		data: map[string][]string{},
 	}
-	db.linkIndex = &SetIndex{
+	db.linkIndex = &Set{
 		data: map[string][]string{},
 	}
-	db.backLinkIndex = &SetIndex{
+	db.backLinkIndex = &Set{
 		data: map[string][]string{},
 	}
 
@@ -147,8 +147,8 @@ func (db *NoteDB) findFloatingNotes() []*Note {
 	return res
 }
 
-func (db *NoteDB) findBrokenLinks() *SetIndex {
-	brokenLinks := &SetIndex{
+func (db *NoteDB) findBrokenLinks() *Set {
+	brokenLinks := &Set{
 		data: map[string][]string{},
 	}
 
